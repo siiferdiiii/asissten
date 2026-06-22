@@ -1,0 +1,472 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ──────────────────────────────
+// Enums
+// ──────────────────────────────
+
+enum MembershipRole {
+  owner_assistant
+  assistant
+  doctor
+  viewer
+}
+
+enum MembershipStatus {
+  active
+  invited
+  revoked
+}
+
+enum TripStatus {
+  planning
+  confirmed
+  ongoing
+  completed
+  cancelled
+}
+
+enum EventType {
+  clinic
+  surgery
+  meeting
+  conference
+  flight
+  personal
+}
+
+enum EventStatus {
+  tentative
+  confirmed
+  cancelled
+}
+
+enum HotelBookingStatus {
+  searching
+  booked
+  confirmed
+  cancelled
+}
+
+enum HotelPlatform {
+  traveloka
+  agoda
+  booking_com
+  other
+}
+
+enum PackingCategory {
+  clothing
+  document
+  medical
+  electronics
+  toiletries
+  other
+}
+
+enum TaskPriority {
+  low
+  medium
+  high
+}
+
+enum TaskStatus {
+  open
+  in_progress
+  done
+}
+
+enum ReminderEntityType {
+  schedule_event
+  hotel
+  task
+  trip
+}
+
+enum ReminderChannel {
+  push
+  whatsapp
+}
+
+enum ActivityAction {
+  create
+  update
+  delete
+}
+
+enum NotificationEntityType {
+  schedule_event
+  hotel
+  task
+  trip
+}
+
+enum ReminderStatus {
+  pending
+  sent
+  failed
+}
+
+enum DocumentEntityType {
+  schedule_event
+  hotel
+  task
+  trip
+}
+
+// ──────────────────────────────
+// Identity & Access
+// ──────────────────────────────
+
+model User {
+  id           String    @id @default(uuid())
+  name         String
+  email        String    @unique
+  phone        String?
+  passwordHash String    @map("password_hash")
+  avatarUrl    String?   @map("avatar_url")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  doctorProfile       DoctorProfile?
+  memberships         Membership[]
+  createdTrips        Trip[]               @relation("TripCreatedBy")
+  createdEvents       ScheduleEvent[]      @relation("EventCreatedBy")
+  createdTasks        Task[]               @relation("TaskCreatedBy")
+  assignedTasks       Task[]               @relation("TaskAssignedTo")
+  uploadedDocuments   Document[]           @relation("DocumentUploadedBy")
+  receivedReminders   Reminder[]           @relation("ReminderRecipient")
+  notifications       Notification[]      @relation("NotificationRecipient")
+  activityLogEntries  ActivityLog[]        @relation("ActivityActor")
+  packingTemplates    PackingTemplate[]    @relation("TemplateOwner")
+  passwordResetTokens PasswordResetToken[]
+  refreshTokens       RefreshToken[]
+  pushSubscriptions   PushSubscription[]
+
+  @@map("users")
+}
+
+model DoctorProfile {
+  id              String   @id @default(uuid())
+  userId          String   @unique @map("user_id")
+  user            User     @relation(fields: [userId], references: [id])
+  specialization  String
+  strNumber       String?  @map("str_number")
+  defaultTimezone String   @default("Asia/Jakarta") @map("default_timezone")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  memberships    Membership[]
+  trips          Trip[]
+  scheduleEvents ScheduleEvent[]
+  tasks          Task[]
+  activityLogs   ActivityLog[]
+
+  @@map("doctor_profiles")
+}
+
+model Membership {
+  id                   String           @id @default(uuid())
+  userId               String           @map("user_id")
+  user                 User             @relation(fields: [userId], references: [id])
+  doctorProfileId      String           @map("doctor_profile_id")
+  doctorProfile        DoctorProfile    @relation(fields: [doctorProfileId], references: [id])
+  role                 MembershipRole
+  status               MembershipStatus @default(active)
+  inviteToken          String?          @unique @map("invite_token")
+  inviteTokenExpiresAt DateTime?        @map("invite_token_expires_at")
+  invitedAt            DateTime         @default(now()) @map("invited_at")
+  updatedAt            DateTime         @updatedAt @map("updated_at")
+
+  @@unique([userId, doctorProfileId])
+  @@index([doctorProfileId])
+  @@map("memberships")
+}
+
+// ──────────────────────────────
+// Trips & Schedule
+// ──────────────────────────────
+
+model Trip {
+  id                 String        @id @default(uuid())
+  doctorProfileId    String        @map("doctor_profile_id")
+  doctorProfile      DoctorProfile @relation(fields: [doctorProfileId], references: [id])
+  title              String
+  destinationCity    String        @map("destination_city")
+  destinationCountry String        @map("destination_country")
+  startDate          DateTime      @map("start_date")
+  endDate            DateTime      @map("end_date")
+  purpose            String?
+  status             TripStatus    @default(planning)
+  createdById        String        @map("created_by")
+  createdBy          User          @relation("TripCreatedBy", fields: [createdById], references: [id])
+  createdAt          DateTime      @default(now()) @map("created_at")
+  updatedAt          DateTime      @updatedAt @map("updated_at")
+  deletedAt          DateTime?     @map("deleted_at")
+
+  scheduleEvents ScheduleEvent[]
+  hotels         Hotel[]
+  packingList    PackingList?
+  tasks          Task[]
+
+  @@index([doctorProfileId])
+  @@map("trips")
+}
+
+model ScheduleEvent {
+  id              String        @id @default(uuid())
+  doctorProfileId String        @map("doctor_profile_id")
+  doctorProfile   DoctorProfile @relation(fields: [doctorProfileId], references: [id])
+  tripId          String?       @map("trip_id")
+  trip            Trip?         @relation(fields: [tripId], references: [id])
+  type            EventType
+  title           String
+  location        String?
+  startDatetime   DateTime      @map("start_datetime")
+  endDatetime     DateTime      @map("end_datetime")
+  timezone        String
+  isRecurring     Boolean       @default(false) @map("is_recurring")
+  recurrenceRule  String?       @map("recurrence_rule")
+  status          EventStatus   @default(tentative)
+  notes           String?
+  createdById     String        @map("created_by")
+  createdBy       User          @relation("EventCreatedBy", fields: [createdById], references: [id])
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+  deletedAt       DateTime?     @map("deleted_at")
+
+  @@index([doctorProfileId, startDatetime])
+  @@index([tripId])
+  @@map("schedule_events")
+}
+
+// ──────────────────────────────
+// Hotel
+// ──────────────────────────────
+
+model Hotel {
+  id               String             @id @default(uuid())
+  tripId           String             @map("trip_id")
+  trip             Trip               @relation(fields: [tripId], references: [id])
+  name             String
+  formattedAddress String?            @map("formatted_address")
+  latitude         Float?
+  longitude        Float?
+  placeId          String?            @map("place_id")
+  checkIn          DateTime           @map("check_in")
+  checkOut         DateTime           @map("check_out")
+  bookingStatus    HotelBookingStatus @default(searching) @map("booking_status")
+  bookingReference String?            @map("booking_reference")
+  price            Decimal?           @db.Decimal(12, 2)
+  currency         String?
+  platform         HotelPlatform?
+  notes            String?
+  createdAt        DateTime           @default(now()) @map("created_at")
+  updatedAt        DateTime           @updatedAt @map("updated_at")
+  deletedAt        DateTime?          @map("deleted_at")
+
+  @@index([tripId])
+  @@map("hotels")
+}
+
+// ──────────────────────────────
+// Packing
+// ──────────────────────────────
+
+model PackingTemplate {
+  id          String   @id @default(uuid())
+  ownerUserId String   @map("owner_user_id")
+  owner       User     @relation("TemplateOwner", fields: [ownerUserId], references: [id])
+  name        String
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  items PackingTemplateItem[]
+
+  @@map("packing_templates")
+}
+
+model PackingTemplateItem {
+  id         String          @id @default(uuid())
+  templateId String          @map("template_id")
+  template   PackingTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  itemName   String          @map("item_name")
+  category   PackingCategory
+  defaultQty Int             @default(1) @map("default_qty")
+
+  @@map("packing_template_items")
+}
+
+model PackingList {
+  id     String @id @default(uuid())
+  tripId String @unique @map("trip_id")
+  trip   Trip   @relation(fields: [tripId], references: [id])
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  items PackingItem[]
+
+  @@map("packing_lists")
+}
+
+model PackingItem {
+  id            String          @id @default(uuid())
+  packingListId String          @map("packing_list_id")
+  packingList   PackingList     @relation(fields: [packingListId], references: [id], onDelete: Cascade)
+  itemName      String          @map("item_name")
+  category      PackingCategory
+  qty           Int             @default(1)
+  isPacked      Boolean         @default(false) @map("is_packed")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+
+  @@index([packingListId])
+  @@map("packing_items")
+}
+
+// ──────────────────────────────
+// Tasks
+// ──────────────────────────────
+
+model Task {
+  id              String        @id @default(uuid())
+  doctorProfileId String        @map("doctor_profile_id")
+  doctorProfile   DoctorProfile @relation(fields: [doctorProfileId], references: [id])
+  tripId          String?       @map("trip_id")
+  trip            Trip?         @relation(fields: [tripId], references: [id])
+  title           String
+  description     String?
+  dueDate         DateTime?     @map("due_date")
+  assignedToId    String?       @map("assigned_to")
+  assignedTo      User?         @relation("TaskAssignedTo", fields: [assignedToId], references: [id])
+  priority        TaskPriority  @default(medium)
+  status          TaskStatus    @default(open)
+  createdById     String        @map("created_by")
+  createdBy       User          @relation("TaskCreatedBy", fields: [createdById], references: [id])
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+  deletedAt       DateTime?     @map("deleted_at")
+
+  @@index([doctorProfileId])
+  @@index([assignedToId])
+  @@map("tasks")
+}
+
+// ──────────────────────────────
+// Reminders, Notifications, Documents, Activity Log
+// ──────────────────────────────
+
+model Reminder {
+  id              String             @id @default(uuid())
+  entityType      ReminderEntityType @map("entity_type")
+  entityId        String             @map("entity_id")
+  remindAt        DateTime           @map("remind_at")
+  channel         ReminderChannel
+  recipientUserId String             @map("recipient_user_id")
+  recipient       User               @relation("ReminderRecipient", fields: [recipientUserId], references: [id])
+  status          ReminderStatus     @default(pending)
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+
+  @@index([entityType, entityId])
+  @@index([remindAt, status])
+  @@map("reminders")
+}
+
+// In-app inbox item — beda dari Reminder (mesin penjadwalan kirim).
+// Reminder yang sukses terkirim akan membuat satu baris Notification.
+model Notification {
+  id              String                  @id @default(uuid())
+  recipientUserId String                  @map("recipient_user_id")
+  recipient       User                    @relation("NotificationRecipient", fields: [recipientUserId], references: [id])
+  title           String
+  body            String
+  entityType      NotificationEntityType? @map("entity_type")
+  entityId        String?                 @map("entity_id")
+  isRead          Boolean                 @default(false) @map("is_read")
+  createdAt       DateTime                @default(now()) @map("created_at")
+  updatedAt       DateTime                @updatedAt @map("updated_at")
+
+  @@index([recipientUserId, isRead])
+  @@map("notifications")
+}
+
+model Document {
+  id           String             @id @default(uuid())
+  entityType   DocumentEntityType @map("entity_type")
+  entityId     String             @map("entity_id")
+  fileUrl      String             @map("file_url")
+  fileType     String             @map("file_type")
+  fileSize     Int                @map("file_size")
+  uploadedById String             @map("uploaded_by")
+  uploadedBy   User               @relation("DocumentUploadedBy", fields: [uploadedById], references: [id])
+  uploadedAt   DateTime           @default(now()) @map("uploaded_at")
+
+  @@index([entityType, entityId])
+  @@map("documents")
+}
+
+model ActivityLog {
+  id              String        @id @default(uuid())
+  doctorProfileId String        @map("doctor_profile_id")
+  doctorProfile   DoctorProfile @relation(fields: [doctorProfileId], references: [id])
+  actorUserId     String        @map("actor_user_id")
+  actor           User          @relation("ActivityActor", fields: [actorUserId], references: [id])
+  action          ActivityAction
+  entityType      String        @map("entity_type")
+  entityId        String        @map("entity_id")
+  createdAt       DateTime      @default(now()) @map("created_at")
+
+  @@index([doctorProfileId, createdAt])
+  @@map("activity_logs")
+}
+
+// ──────────────────────────────
+// Auth tokens
+// ──────────────────────────────
+
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  user      User      @relation(fields: [userId], references: [id])
+  token     String    @unique
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@map("password_reset_tokens")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  user      User      @relation(fields: [userId], references: [id])
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@map("refresh_tokens")
+}
+
+model PushSubscription {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  endpoint  String
+  p256dh    String
+  auth      String
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@map("push_subscriptions")
+}
