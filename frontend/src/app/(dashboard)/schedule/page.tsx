@@ -312,12 +312,16 @@ export default function SchedulePage() {
                         flight: 'bg-cyan-500/10 text-cyan-600',
                         personal: 'bg-zinc-500/10 text-zinc-600',
                       };
+                      const isTentative = e.status === 'tentative';
+                      const badgeStyle = isTentative
+                        ? 'bg-amber-500/10 text-amber-700 border-dashed border-amber-500/40 border font-semibold'
+                        : cn('border border-transparent', badgeColors[e.type]);
                       return (
                         <div
                           key={e.id}
                           className={cn(
-                            "px-1.5 py-0.5 rounded text-[10px] truncate border border-transparent font-medium",
-                            badgeColors[e.type]
+                            "px-1.5 py-0.5 rounded text-[10px] truncate font-medium",
+                            badgeStyle
                           )}
                           title={e.title}
                         >

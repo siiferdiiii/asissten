@@ -68,6 +68,36 @@ export function ScheduleForm({ event, presetTripId, onSuccess }: ScheduleFormPro
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [warnings, setWarnings] = useState<any[]>([]);
+  const [showOverlapModal, setShowOverlapModal] = useState(false);
+  const [conflictNames, setConflictNames] = useState<string[]>([]);
+  const [createdEventId, setCreatedEventId] = useState<string | null>(null);
+
+  const handleRevert = async () => {
+    if (!doctorProfileId) return;
+    try {
+      setLoading(true);
+      if (event) {
+        await apiFetch(`/schedule-events/${event.id}?doctorProfileId=${doctorProfileId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            startDatetime: event.startDatetime,
+            endDatetime: event.endDatetime,
+            status: event.status,
+          }),
+        });
+      } else if (createdEventId) {
+        await apiFetch(`/schedule-events/${createdEventId}?doctorProfileId=${doctorProfileId}`, {
+          method: 'DELETE',
+        });
+      }
+      queryClient.invalidateQueries({ queryKey: ['schedule-events'] });
+      setShowOverlapModal(false);
+    } catch (err) {
+      console.error('Revert failed:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Fetch trips for linking dropdown
   const { data: tripsRes } = useQuery<ApiResponse<Trip[]>>({
@@ -155,15 +185,18 @@ export function ScheduleForm({ event, presetTripId, onSuccess }: ScheduleFormPro
           method: 'POST',
           body: JSON.stringify(bodyPayload),
         });
+        if (res?.data?.id) {
+          setCreatedEventId(res.data.id);
+        }
       }
 
       // Check if warnings/overlaps exist
       if (res.warnings && res.warnings.length > 0) {
-        setWarnings(res.warnings);
+        const names = res.warnings[0].conflictsWith.map((c: any) => c.title);
+        setConflictNames(names);
+        setShowOverlapModal(true);
         queryClient.invalidateQueries({ queryKey: ['schedule-events'] });
         queryClient.invalidateQueries({ queryKey: ['trips'] });
-        // Don't close immediately if there's overlap, let user see conflict warning
-        // but provide close handler
       } else {
         queryClient.invalidateQueries({ queryKey: ['schedule-events'] });
         queryClient.invalidateQueries({ queryKey: ['trips'] });
@@ -178,27 +211,47 @@ export function ScheduleForm({ event, presetTripId, onSuccess }: ScheduleFormPro
 
   return (
     <div className="space-y-4">
-      {/* Overlap warnings */}
-      {warnings.length > 0 && (
-        <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-4 text-sm text-yellow-600 space-y-2">
-          <div className="flex items-center gap-2 font-semibold">
-            <AlertCircle className="h-4 w-4 shrink-0 text-yellow-500" />
-            <span>Overlap Detected (Non-Blocking Warning)</span>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            This event overlaps with other schedule events for this doctor:
-          </p>
-          <ul className="list-disc pl-4 space-y-1 text-xs">
-            {warnings[0].conflictsWith.map((c: any) => (
-              <li key={c.id}>
-                <strong>{c.title}</strong> ({new Date(c.startDatetime).toLocaleTimeString()} - {new Date(c.endDatetime).toLocaleTimeString()})
-              </li>
-            ))}
-          </ul>
-          <div className="flex justify-end pt-2">
-            <Button size="sm" variant="outline" className="text-yellow-600 border-yellow-500/20 hover:bg-yellow-500/10" onClick={onSuccess}>
-              Acknowledge & Close
-            </Button>
+      {/* Overlap warnings confirmation modal */}
+      {showOverlapModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 animate-in fade-in duration-200">
+          <div className="bg-background border rounded-xl shadow-xl max-w-md w-full p-6 space-y-4 animate-in zoom-in-95 duration-200">
+            <h3 className="font-semibold text-lg flex items-center gap-2 text-yellow-605">
+              <AlertCircle className="h-5 w-5 text-yellow-500 shrink-0" />
+              <span>Jadwal Bentrok</span>
+            </h3>
+            <div className="text-sm text-muted-foreground space-y-2">
+              <p>
+                Waktu yang Anda pilih bentrok dengan jadwal berikut:
+              </p>
+              <ul className="list-disc pl-5 font-semibold text-foreground">
+                {conflictNames.map((name, i) => (
+                  <li key={i}>{name}</li>
+                ))}
+              </ul>
+              <p className="text-xs pt-2">
+                Apakah Anda tetap ingin menyimpan perubahan?
+              </p>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                variant="ghost"
+                onClick={handleRevert}
+                disabled={loading}
+              >
+                Batal
+              </Button>
+              <Button
+                variant="default"
+                className="bg-yellow-605 hover:bg-yellow-700 text-white border-0"
+                onClick={() => {
+                  setShowOverlapModal(false);
+                  onSuccess();
+                }}
+                disabled={loading}
+              >
+                Ya, Tetap Simpan
+              </Button>
+            </div>
           </div>
         </div>
       )}

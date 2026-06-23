@@ -54,8 +54,8 @@ export class CreateScheduleEventDto {
   recurrenceRule?: string;
 
   @IsEnum(EventStatus)
-  @IsNotEmpty()
-  status: EventStatus;
+  @IsOptional()
+  status?: EventStatus;
 
   @IsString()
   @IsOptional()

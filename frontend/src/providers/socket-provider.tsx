@@ -1,9 +1,8 @@
-'use client';
-
-import React, { createContext, useContext, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { getSocket, disconnectSocket } from '@/lib/socket';
 import type { Socket } from 'socket.io-client';
+import { Bell, X } from 'lucide-react';
 
 interface SocketContextValue {
   socket: Socket | null;
@@ -24,6 +23,7 @@ interface SocketProviderProps {
 export function SocketProvider({ children, userId, doctorProfileId }: SocketProviderProps) {
   const queryClient = useQueryClient();
   const socketRef = useRef<Socket | null>(null);
+  const [toast, setToast] = useState<{ message: string; visible: boolean } | null>(null);
 
   useEffect(() => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
@@ -149,9 +149,17 @@ export function SocketProvider({ children, userId, doctorProfileId }: SocketProv
     });
 
     // ─── Notification events ──────────────────────────────────────────────────
-    socket.on('notification.created', () => {
+    socket.on('notification.created', ({ data }: { data: any }) => {
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
       queryClient.invalidateQueries({ queryKey: ['notifications', 'count'] });
+      if (data && data.body) {
+        setToast({ message: data.body, visible: true });
+        setTimeout(() => {
+          setToast((prev) =>
+            prev && prev.message === data.body ? { ...prev, visible: false } : prev
+          );
+        }, 6000);
+      }
     });
 
     // ─── Connection error handling ───────────────────────────────────────────
@@ -188,6 +196,23 @@ export function SocketProvider({ children, userId, doctorProfileId }: SocketProv
   return (
     <SocketContext.Provider value={{ socket: socketRef.current }}>
       {children}
+      {toast && toast.visible && (
+        <div className="fixed bottom-5 right-5 z-50 flex max-w-sm animate-in slide-in-from-bottom-5 fade-in duration-300 items-start gap-3 rounded-xl border bg-card text-card-foreground p-4 shadow-xl border-primary/20 bg-background/95 backdrop-blur-sm">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <Bell className="h-4 w-4" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h4 className="text-sm font-semibold text-foreground">Notifikasi</h4>
+            <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{toast.message}</p>
+          </div>
+          <button
+            onClick={() => setToast(null)}
+            className="text-muted-foreground hover:text-foreground transition-colors p-1"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
     </SocketContext.Provider>
   );
 }

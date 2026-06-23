@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useMembership } from '@/hooks/use-membership';
-import { MapPinIcon, ClockIcon, Pencil, Trash, CheckCircle } from 'lucide-react';
+import { MapPinIcon, ClockIcon, Pencil, Trash, CheckCircle, XCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   Dialog,
@@ -29,6 +29,22 @@ export function EventCard({ event }: EventCardProps) {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
+
+  const handleReject = async () => {
+    if (!doctorProfileId) return;
+    setRejecting(true);
+    try {
+      await apiFetch(`/schedule-events/${event.id}/confirm?doctorProfileId=${doctorProfileId}&status=cancelled`, {
+        method: 'POST',
+      });
+      queryClient.invalidateQueries({ queryKey: ['schedule-events'] });
+    } catch (err) {
+      console.error('Reject event failed:', err);
+    } finally {
+      setRejecting(false);
+    }
+  };
 
   const typeColors: Record<EventType, string> = {
     clinic: 'bg-blue-500/10 text-blue-500 border-blue-500/20',
@@ -87,10 +103,9 @@ export function EventCard({ event }: EventCardProps) {
     }
   };
 
-  // Roles permitted to confirm: owner_assistant, assistant, doctor
-  const canConfirm =
-    event.status === 'tentative' &&
-    (role === 'owner_assistant' || role === 'assistant' || role === 'doctor');
+  // Roles permitted to confirm or reject: only Doctor can confirm or reject
+  const canConfirmOrReject =
+    event.status === 'tentative' && role === 'doctor';
 
   return (
     <Card className="group relative overflow-hidden rounded-xl border bg-card hover:shadow-xs transition-all duration-200">
@@ -138,25 +153,35 @@ export function EventCard({ event }: EventCardProps) {
           </p>
         )}
 
-        {/* Confirmation Button for doctors or assistants */}
-        {canConfirm && (
-          <div className="pt-2">
+        {/* Confirmation and Rejection buttons for doctor only */}
+        {canConfirmOrReject && (
+          <div className="flex gap-2 pt-2">
             <Button
               variant="outline"
               size="sm"
               onClick={handleConfirm}
-              disabled={confirming}
-              className="flex items-center gap-1.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-500/5 border-emerald-500/20"
+              disabled={confirming || rejecting}
+              className="flex items-center gap-1.5 text-emerald-600 hover:text-emerald-705 hover:bg-emerald-500/5 border-emerald-500/20"
             >
               <CheckCircle className="h-4 w-4" />
-              <span>{confirming ? 'Confirming...' : 'Konfirmasi Event'}</span>
+              <span>{confirming ? 'Memproses...' : 'Konfirmasi Pertemuan'}</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleReject}
+              disabled={confirming || rejecting}
+              className="flex items-center gap-1.5 text-rose-600 hover:text-rose-705 hover:bg-rose-500/5 border-rose-500/20"
+            >
+              <XCircle className="h-4 w-4" />
+              <span>{rejecting ? 'Memproses...' : 'Tolak'}</span>
             </Button>
           </div>
         )}
       </CardContent>
 
-      {/* Edit/Delete controls for OA and AS */}
-      {canMutate && (
+      {/* Edit controls for OA, AS, and Doctor. Delete only for OA and AS */}
+      {(canMutate || role === 'doctor') && (
         <div className="absolute top-4 right-4 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity bg-card rounded-lg">
           <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
             <DialogTrigger render={<Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground"><Pencil className="h-3.5 w-3.5" /></Button>} />
@@ -168,27 +193,29 @@ export function EventCard({ event }: EventCardProps) {
             </DialogContent>
           </Dialog>
 
-          <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-            <DialogTrigger render={<Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive"><Trash className="h-3.5 w-3.5" /></Button>} />
-            <DialogContent className="max-w-sm">
-              <DialogHeader>
-                <DialogTitle className="text-rose-500">Delete Event</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4 pt-2">
-                <p className="text-sm text-muted-foreground">
-                  Are you sure you want to delete this event?
-                </p>
-                <div className="flex justify-end gap-2">
-                  <Button variant="ghost" onClick={() => setIsDeleteDialogOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
-                    {deleting ? 'Deleting...' : 'Delete'}
-                  </Button>
+          {canMutate && (
+            <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+              <DialogTrigger render={<Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive"><Trash className="h-3.5 w-3.5" /></Button>} />
+              <DialogContent className="max-w-sm">
+                <DialogHeader>
+                  <DialogTitle className="text-rose-500">Delete Event</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 pt-2">
+                  <p className="text-sm text-muted-foreground">
+                    Are you sure you want to delete this event?
+                  </p>
+                  <div className="flex justify-end gap-2">
+                    <Button variant="ghost" onClick={() => setIsDeleteDialogOpen(false)}>
+                      Cancel
+                    </Button>
+                    <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
+                      {deleting ? 'Deleting...' : 'Delete'}
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            </DialogContent>
-          </Dialog>
+              </DialogContent>
+            </Dialog>
+          )}
         </div>
       )}
     </Card>

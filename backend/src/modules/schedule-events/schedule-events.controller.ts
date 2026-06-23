@@ -20,7 +20,7 @@ import { RolesGuard } from '../../core/guards/roles.guard';
 import { Roles } from '../../core/decorators/roles.decorator';
 import { GetUser } from '../../core/decorators/get-user.decorator';
 import { LogActivity } from '../../core/decorators/log-activity.decorator';
-import { MembershipRole } from '@prisma/client';
+import { MembershipRole, EventStatus } from '@prisma/client';
 import { ActivityLogInterceptor } from '../../core/interceptors/activity-log.interceptor';
 import { RequestWithUser } from '../../core/types/request.types';
 import { Request } from 'express';
@@ -68,15 +68,21 @@ export class ScheduleEventsController {
   }
 
   @Patch(':eventId')
-  @Roles(MembershipRole.owner_assistant, MembershipRole.assistant)
+  @Roles(
+    MembershipRole.owner_assistant,
+    MembershipRole.assistant,
+    MembershipRole.doctor,
+  )
   @LogActivity('schedule_event')
   async update(
     @Param('eventId') eventId: string,
     @Query('doctorProfileId') doctorProfileId: string,
     @Body() dto: UpdateScheduleEventDto,
     @GetUser('id') userId: string,
+    @Req() req: any,
   ) {
-    return this.scheduleEventsService.update(eventId, dto, doctorProfileId, userId);
+    const role = (req as RequestWithUser).membership?.role;
+    return this.scheduleEventsService.update(eventId, dto, doctorProfileId, role!, userId);
   }
 
   @Delete(':eventId')
@@ -93,18 +99,17 @@ export class ScheduleEventsController {
 
   @Post(':eventId/confirm')
   @Roles(
-    MembershipRole.owner_assistant,
-    MembershipRole.assistant,
     MembershipRole.doctor,
   )
   async confirm(
     @Param('eventId') eventId: string,
     @Query('doctorProfileId') doctorProfileId: string,
+    @Query('status') status: EventStatus = EventStatus.confirmed,
     @GetUser('id') userId: string,
     @Req() req: any,
   ) {
     const role = (req as RequestWithUser).membership?.role;
-    const data = await this.scheduleEventsService.confirm(eventId, doctorProfileId, role!, userId);
+    const data = await this.scheduleEventsService.confirm(eventId, doctorProfileId, role!, userId, status);
     return { data };
   }
 }

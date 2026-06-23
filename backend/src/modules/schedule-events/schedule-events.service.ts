@@ -91,12 +91,12 @@ export class ScheduleEventsService {
       throw new BadRequestException('recurrenceRule is required when isRecurring is true');
     }
 
-    // Check overlap (non-blocking)
+    // Check overlap (non-blocking) - check against confirmed events only
     const conflicts = await this.prisma.scheduleEvent.findMany({
       where: {
         doctorProfileId: dto.doctorProfileId,
         deletedAt: null,
-        status: { not: EventStatus.cancelled },
+        status: EventStatus.confirmed,
         AND: [
           { startDatetime: { lt: dto.endDatetime } },
           { endDatetime: { gt: dto.startDatetime } },
@@ -120,6 +120,7 @@ export class ScheduleEventsService {
     const event = await this.prisma.scheduleEvent.create({
       data: {
         ...dto,
+        status: EventStatus.tentative, // Force tentative status
         createdById: userId,
       },
     });
@@ -132,8 +133,8 @@ export class ScheduleEventsService {
     await this.notificationsService.notifyMembers(
       dto.doctorProfileId,
       userId,
-      'Jadwal Baru Dibuat',
-      `Jadwal "${event.title}" (${event.type}) telah ditambahkan.`,
+      'Permintaan Pertemuan Baru',
+      'Ada permintaan pertemuan baru (Tentative) dari Asisten',
       'schedule_event',
       event.id,
     );
@@ -141,7 +142,7 @@ export class ScheduleEventsService {
     return { data: event, warnings };
   }
 
-  async update(id: string, dto: UpdateScheduleEventDto, doctorProfileId: string, userId: string) {
+  async update(id: string, dto: UpdateScheduleEventDto, doctorProfileId: string, role: MembershipRole, userId: string) {
     const existing = await this.prisma.scheduleEvent.findFirst({
       where: {
         id,
@@ -152,6 +153,13 @@ export class ScheduleEventsService {
 
     if (!existing) {
       throw new NotFoundException(`Schedule event with ID ${id} not found`);
+    }
+
+    // Role restriction check for status changes
+    if (dto.status !== undefined && dto.status !== existing.status) {
+      if (role !== MembershipRole.doctor) {
+        throw new ForbiddenException('Hanya Dokter yang dapat mengubah status jadwal');
+      }
     }
 
     const start = dto.startDatetime ?? existing.startDatetime;
@@ -168,13 +176,13 @@ export class ScheduleEventsService {
       throw new BadRequestException('recurrenceRule is required when isRecurring is true');
     }
 
-    // Check overlap (excluding this event itself)
+    // Check overlap (excluding this event itself) - check against confirmed events only
     const conflicts = await this.prisma.scheduleEvent.findMany({
       where: {
         doctorProfileId,
         deletedAt: null,
         id: { not: id },
-        status: { not: EventStatus.cancelled },
+        status: EventStatus.confirmed,
         AND: [
           { startDatetime: { lt: end } },
           { endDatetime: { gt: start } },
@@ -217,7 +225,7 @@ export class ScheduleEventsService {
     return { data: updated, warnings };
   }
 
-  async confirm(id: string, doctorProfileId: string, role: MembershipRole, userId: string) {
+  async confirm(id: string, doctorProfileId: string, role: MembershipRole, userId: string, status: EventStatus = EventStatus.confirmed) {
     const event = await this.prisma.scheduleEvent.findFirst({
       where: {
         id,
@@ -236,7 +244,7 @@ export class ScheduleEventsService {
 
     const updated = await this.prisma.scheduleEvent.update({
       where: { id },
-      data: { status: EventStatus.confirmed },
+      data: { status },
     });
 
     this.gateway.emitToDoctorRoom(doctorProfileId, 'schedule_event.statusChanged', {
@@ -244,11 +252,15 @@ export class ScheduleEventsService {
       actorId: userId,
     });
 
+    const isConfirmed = status === EventStatus.confirmed;
+    const actionText = isConfirmed ? 'dikonfirmasi' : 'ditolak';
+    const notifTitle = isConfirmed ? 'Jadwal Dikonfirmasi' : 'Jadwal Ditolak';
+
     await this.notificationsService.notifyMembers(
       doctorProfileId,
       userId,
-      'Jadwal Dikonfirmasi',
-      `Jadwal "${updated.title}" telah dikonfirmasi oleh ${role}.`,
+      notifTitle,
+      `Jadwal "${updated.title}" telah ${actionText} oleh ${role}.`,
       'schedule_event',
       updated.id,
     );
