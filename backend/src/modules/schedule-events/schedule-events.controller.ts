@@ -74,8 +74,9 @@ export class ScheduleEventsController {
     @Param('eventId') eventId: string,
     @Query('doctorProfileId') doctorProfileId: string,
     @Body() dto: UpdateScheduleEventDto,
+    @GetUser('id') userId: string,
   ) {
-    return this.scheduleEventsService.update(eventId, dto, doctorProfileId);
+    return this.scheduleEventsService.update(eventId, dto, doctorProfileId, userId);
   }
 
   @Delete(':eventId')
@@ -84,9 +85,10 @@ export class ScheduleEventsController {
   async remove(
     @Param('eventId') eventId: string,
     @Query('doctorProfileId') doctorProfileId: string,
+    @GetUser('id') userId: string,
     @Query('scope') scope: 'this' | 'this_and_following' = 'this',
   ) {
-    return this.scheduleEventsService.softDelete(eventId, doctorProfileId, scope);
+    return this.scheduleEventsService.softDelete(eventId, doctorProfileId, scope, userId);
   }
 
   @Post(':eventId/confirm')
@@ -98,10 +100,11 @@ export class ScheduleEventsController {
   async confirm(
     @Param('eventId') eventId: string,
     @Query('doctorProfileId') doctorProfileId: string,
+    @GetUser('id') userId: string,
     @Req() req: any,
   ) {
     const role = (req as RequestWithUser).membership?.role;
-    const data = await this.scheduleEventsService.confirm(eventId, doctorProfileId, role!);
+    const data = await this.scheduleEventsService.confirm(eventId, doctorProfileId, role!, userId);
     return { data };
   }
 }

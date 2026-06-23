@@ -69,8 +69,9 @@ export class TripsController {
     @Param('tripId') tripId: string,
     @Query('doctorProfileId') doctorProfileId: string,
     @Body() dto: UpdateTripDto,
+    @GetUser('id') userId: string,
   ) {
-    const data = await this.tripsService.update(tripId, dto, doctorProfileId);
+    const data = await this.tripsService.update(tripId, dto, doctorProfileId, userId);
     return { data };
   }
 
@@ -80,7 +81,8 @@ export class TripsController {
   async remove(
     @Param('tripId') tripId: string,
     @Query('doctorProfileId') doctorProfileId: string,
+    @GetUser('id') userId: string,
   ) {
-    return this.tripsService.softDelete(tripId, doctorProfileId);
+    return this.tripsService.softDelete(tripId, doctorProfileId, userId);
   }
 }

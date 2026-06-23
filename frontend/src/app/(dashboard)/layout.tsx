@@ -4,16 +4,11 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useMembership } from '@/hooks/use-membership';
-import { PlaneTakeoff, Calendar, History, Settings, LogOut, Menu, X, ChevronDown, User, Building2, Users } from 'lucide-react';
+import { SocketProvider } from '@/providers/socket-provider';
+import { PlaneTakeoff, Calendar, History, Settings, LogOut, Menu, X, ChevronDown, User, Building2, Users, CheckSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
+import { NotificationInbox } from '@/components/ui/notification-inbox';
 
 export default function DashboardLayout({
   children,
@@ -27,7 +22,7 @@ export default function DashboardLayout({
     role,
     memberships,
     switchProfile,
-    isOwnerAssistant,
+    userId,
   } = useMembership();
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -35,7 +30,6 @@ export default function DashboardLayout({
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
 
   useEffect(() => {
-    // Get active profile's detail from memberships
     const active = memberships.find((m) => m.doctorProfileId === doctorProfileId);
     if (active) {
       setActiveProfileName(
@@ -50,7 +44,6 @@ export default function DashboardLayout({
 
   const handleLogout = async () => {
     try {
-      // Clear client session and redirect
       localStorage.removeItem('accessToken');
       localStorage.removeItem('activeDoctorProfileId');
       localStorage.removeItem('memberships');
@@ -76,10 +69,16 @@ export default function DashboardLayout({
       roles: ['owner_assistant', 'assistant', 'doctor', 'viewer'],
     },
     {
+      name: 'Tasks',
+      href: '/tasks',
+      icon: CheckSquare,
+      roles: ['owner_assistant', 'assistant', 'doctor', 'viewer'],
+    },
+    {
       name: 'Log Aktivitas',
       href: '/activity-logs',
       icon: History,
-      roles: ['owner_assistant'], // Only owner_assistant
+      roles: ['owner_assistant'],
     },
     {
       name: 'Team Members',
@@ -91,7 +90,17 @@ export default function DashboardLayout({
 
   const activeNavItems = navItems.filter((item) => role && item.roles.includes(role));
 
-  return (
+  const pageTitle = (() => {
+    if (pathname === '/trips') return 'Trip Management';
+    if (pathname.startsWith('/trips/')) return 'Trip Details';
+    if (pathname === '/schedule') return 'Calendar & Schedule';
+    if (pathname === '/tasks') return 'Task Board';
+    if (pathname === '/activity-logs') return 'Log Aktivitas';
+    if (pathname === '/team') return 'Team Directory';
+    return 'Dashboard';
+  })();
+
+  const layoutContent = (
     <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground font-sans">
       {/* Mobile Sidebar Overlay */}
       {isSidebarOpen && (
@@ -101,7 +110,7 @@ export default function DashboardLayout({
         />
       )}
 
-      {/* Sidebar collapsible */}
+      {/* Sidebar */}
       <aside
         className={cn(
           "fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r bg-card transition-transform duration-300 md:static md:translate-x-0",
@@ -189,7 +198,7 @@ export default function DashboardLayout({
           })}
         </nav>
 
-        {/* Sidebar Footer / User Info */}
+        {/* Sidebar Footer */}
         <div className="p-4 border-t bg-muted/20">
           <div className="flex items-center justify-between gap-2">
             <div className="overflow-hidden">
@@ -216,16 +225,14 @@ export default function DashboardLayout({
             >
               <Menu className="h-5 w-5" />
             </Button>
-            <h2 className="font-semibold text-lg text-foreground truncate">
-              {pathname === '/trips' && 'Trip Management'}
-              {pathname.startsWith('/trips/') && 'Trip Details'}
-              {pathname === '/schedule' && 'Calendar & Schedule'}
-              {pathname === '/activity-logs' && 'Log Aktivitas'}
-              {pathname === '/team' && 'Team Directory'}
-            </h2>
+            <h2 className="font-semibold text-lg text-foreground truncate">{pageTitle}</h2>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            {/* Notification Inbox — only shown when user has an active profile */}
+            {doctorProfileId && userId && (
+              <NotificationInbox />
+            )}
             {role && (
               <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary border border-primary/20 capitalize">
                 {role.replace('_', ' ')} Mode
@@ -243,4 +250,15 @@ export default function DashboardLayout({
       </div>
     </div>
   );
+
+  // Wrap with SocketProvider only when we have an active session
+  if (doctorProfileId && userId) {
+    return (
+      <SocketProvider userId={userId} doctorProfileId={doctorProfileId}>
+        {layoutContent}
+      </SocketProvider>
+    );
+  }
+
+  return layoutContent;
 }

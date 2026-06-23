@@ -4,10 +4,16 @@ import { CreateScheduleEventDto } from './dto/create-schedule-event.dto';
 import { UpdateScheduleEventDto } from './dto/update-schedule-event.dto';
 import { QueryScheduleEventDto } from './dto/query-schedule-event.dto';
 import { EventStatus, MembershipRole } from '@prisma/client';
+import { RealtimeGateway } from '../realtime/realtime.gateway';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class ScheduleEventsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly gateway: RealtimeGateway,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   async findAll(query: QueryScheduleEventDto) {
     const { doctorProfileId, from, to, type, tripId, status, page = 1, limit = 20 } = query;
@@ -118,10 +124,24 @@ export class ScheduleEventsService {
       },
     });
 
+    this.gateway.emitToDoctorRoom(dto.doctorProfileId, 'schedule_event.created', {
+      data: event,
+      actorId: userId,
+    });
+
+    await this.notificationsService.notifyMembers(
+      dto.doctorProfileId,
+      userId,
+      'Jadwal Baru Dibuat',
+      `Jadwal "${event.title}" (${event.type}) telah ditambahkan.`,
+      'schedule_event',
+      event.id,
+    );
+
     return { data: event, warnings };
   }
 
-  async update(id: string, dto: UpdateScheduleEventDto, doctorProfileId: string) {
+  async update(id: string, dto: UpdateScheduleEventDto, doctorProfileId: string, userId: string) {
     const existing = await this.prisma.scheduleEvent.findFirst({
       where: {
         id,
@@ -180,10 +200,24 @@ export class ScheduleEventsService {
       data: dto,
     });
 
+    this.gateway.emitToDoctorRoom(doctorProfileId, 'schedule_event.updated', {
+      data: updated,
+      actorId: userId,
+    });
+
+    await this.notificationsService.notifyMembers(
+      doctorProfileId,
+      userId,
+      'Jadwal Diperbarui',
+      `Jadwal "${updated.title}" telah diperbarui.`,
+      'schedule_event',
+      updated.id,
+    );
+
     return { data: updated, warnings };
   }
 
-  async confirm(id: string, doctorProfileId: string, role: MembershipRole) {
+  async confirm(id: string, doctorProfileId: string, role: MembershipRole, userId: string) {
     const event = await this.prisma.scheduleEvent.findFirst({
       where: {
         id,
@@ -205,10 +239,24 @@ export class ScheduleEventsService {
       data: { status: EventStatus.confirmed },
     });
 
+    this.gateway.emitToDoctorRoom(doctorProfileId, 'schedule_event.statusChanged', {
+      data: updated,
+      actorId: userId,
+    });
+
+    await this.notificationsService.notifyMembers(
+      doctorProfileId,
+      userId,
+      'Jadwal Dikonfirmasi',
+      `Jadwal "${updated.title}" telah dikonfirmasi oleh ${role}.`,
+      'schedule_event',
+      updated.id,
+    );
+
     return updated;
   }
 
-  async softDelete(id: string, doctorProfileId: string, _scope: 'this' | 'this_and_following') {
+  async softDelete(id: string, doctorProfileId: string, _scope: 'this' | 'this_and_following', userId: string) {
     const existing = await this.prisma.scheduleEvent.findFirst({
       where: {
         id,
@@ -225,6 +273,20 @@ export class ScheduleEventsService {
       where: { id },
       data: { deletedAt: new Date() },
     });
+
+    this.gateway.emitToDoctorRoom(doctorProfileId, 'schedule_event.deleted', {
+      data: { id },
+      actorId: userId,
+    });
+
+    await this.notificationsService.notifyMembers(
+      doctorProfileId,
+      userId,
+      'Jadwal Dihapus',
+      `Jadwal "${existing.title}" telah dihapus.`,
+      'schedule_event',
+      id,
+    );
 
     return { success: true };
   }

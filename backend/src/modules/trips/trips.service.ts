@@ -4,10 +4,16 @@ import { CreateTripDto } from './dto/create-trip.dto';
 import { UpdateTripDto } from './dto/update-trip.dto';
 import { QueryTripDto } from './dto/query-trip.dto';
 import { TripStatus } from '@prisma/client';
+import { RealtimeGateway } from '../realtime/realtime.gateway';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class TripsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly gateway: RealtimeGateway,
+    private readonly notificationsService: NotificationsService,
+  ) {}
 
   async findAll(query: QueryTripDto) {
     const { doctorProfileId, status, search, page = 1, limit = 20 } = query;
@@ -80,16 +86,32 @@ export class TripsService {
       throw new NotFoundException(`Doctor profile ${dto.doctorProfileId} not found`);
     }
 
-    return this.prisma.trip.create({
+    const trip = await this.prisma.trip.create({
       data: {
         ...dto,
         createdById: userId,
         status: TripStatus.planning,
       },
     });
+
+    this.gateway.emitToDoctorRoom(dto.doctorProfileId, 'trip.created', {
+      data: trip,
+      actorId: userId,
+    });
+
+    await this.notificationsService.notifyMembers(
+      dto.doctorProfileId,
+      userId,
+      'Trip Baru Dibuat',
+      `Trip "${trip.title}" ke ${trip.destinationCity} telah dibuat.`,
+      'trip',
+      trip.id,
+    );
+
+    return trip;
   }
 
-  async update(id: string, dto: UpdateTripDto, doctorProfileId: string) {
+  async update(id: string, dto: UpdateTripDto, doctorProfileId: string, userId: string) {
     const existing = await this.prisma.trip.findFirst({
       where: {
         id,
@@ -113,13 +135,29 @@ export class TripsService {
       throw new BadRequestException('endDate cannot be before startDate');
     }
 
-    return this.prisma.trip.update({
+    const updated = await this.prisma.trip.update({
       where: { id },
       data: dto,
     });
+
+    this.gateway.emitToDoctorRoom(doctorProfileId, 'trip.updated', {
+      data: updated,
+      actorId: userId,
+    });
+
+    await this.notificationsService.notifyMembers(
+      doctorProfileId,
+      userId,
+      'Trip Diperbarui',
+      `Trip "${updated.title}" telah diperbarui.`,
+      'trip',
+      updated.id,
+    );
+
+    return updated;
   }
 
-  async softDelete(id: string, doctorProfileId: string) {
+  async softDelete(id: string, doctorProfileId: string, userId: string) {
     const existing = await this.prisma.trip.findFirst({
       where: {
         id,
@@ -152,6 +190,20 @@ export class TripsService {
         data: { deletedAt: now },
       }),
     ]);
+
+    this.gateway.emitToDoctorRoom(doctorProfileId, 'trip.deleted', {
+      data: { id, doctorProfileId },
+      actorId: userId,
+    });
+
+    await this.notificationsService.notifyMembers(
+      doctorProfileId,
+      userId,
+      'Trip Dihapus',
+      `Trip "${existing.title}" telah dihapus beserta akomodasi, jadwal, dan tugas terkait.`,
+      'trip',
+      id,
+    );
 
     return { success: true };
   }

@@ -14,7 +14,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { EventCard } from '../../schedule/components/event-card';
 import { ScheduleForm } from '../../schedule/components/schedule-form';
 import { TripForm } from '../components/trip-form';
-import { CalendarIcon, MapPinIcon, ArrowLeft, PlusIcon, Pencil, Trash, Plane, Building, Briefcase, FileText } from 'lucide-react';
+import { HotelList } from '../components/hotel-list';
+import { PackingChecklist } from '../components/packing-checklist';
+import { CalendarIcon, MapPinIcon, ArrowLeft, PlusIcon, Pencil, Trash, Building, Briefcase, FileText } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -22,6 +24,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { TripDocuments } from '../components/trip-documents';
 
 export default function TripDetailPage() {
   const params = useParams();
@@ -262,55 +265,19 @@ export default function TripDetailPage() {
           )}
         </TabsContent>
 
-        {/* Tab 2: Hotels (Placeholder for Phase 4) */}
+        {/* Tab 2: Hotels */}
         <TabsContent value="hotels" className="pt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Hotel Bookings</CardTitle>
-              <CardDescription>View and manage hotel reservations during this trip.</CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col items-center justify-center p-12 text-center">
-              <Building className="h-10 w-10 text-muted-foreground mb-3 opacity-30 animate-pulse" />
-              <p className="font-semibold text-sm">Hotel Module (Next Phase)</p>
-              <p className="text-xs text-muted-foreground mt-1 max-w-xs">
-                This feature will be fully active in Phase 4, enabling map picking, prices, and booking reference uploads.
-              </p>
-            </CardContent>
-          </Card>
+          <HotelList tripId={tripId} />
         </TabsContent>
 
-        {/* Tab 3: Packing (Placeholder for Phase 5) */}
+        {/* Tab 3: Packing Checklist */}
         <TabsContent value="packing" className="pt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Packing Checklist</CardTitle>
-              <CardDescription>Auto-generate templates and check items packed.</CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col items-center justify-center p-12 text-center">
-              <Briefcase className="h-10 w-10 text-muted-foreground mb-3 opacity-30 animate-pulse" />
-              <p className="font-semibold text-sm">Packing Module (Next Phase)</p>
-              <p className="text-xs text-muted-foreground mt-1 max-w-xs">
-                This feature will be fully active in Phase 5, enabling templating and status ticks.
-              </p>
-            </CardContent>
-          </Card>
+          <PackingChecklist tripId={tripId} />
         </TabsContent>
 
-        {/* Tab 4: Documents (Placeholder for Phase 6) */}
+        {/* Tab 4: Documents */}
         <TabsContent value="documents" className="pt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Travel Documents</CardTitle>
-              <CardDescription>Keep copies of flight tickets, visas, and passport pages.</CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col items-center justify-center p-12 text-center">
-              <FileText className="h-10 w-10 text-muted-foreground mb-3 opacity-30 animate-pulse" />
-              <p className="font-semibold text-sm">Document Vault (Next Phase)</p>
-              <p className="text-xs text-muted-foreground mt-1 max-w-xs">
-                This feature will be fully active in Phase 6, enabling secure file uploads and downloads.
-              </p>
-            </CardContent>
-          </Card>
+          <TripDocuments tripId={tripId} />
         </TabsContent>
       </Tabs>
     </div>
