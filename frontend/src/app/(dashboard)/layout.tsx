@@ -348,7 +348,7 @@ export default function DashboardLayout({
   // Wrap with SocketProvider only when we have an active session
   if (doctorProfileId && userId) {
     return (
-      <SocketProvider userId={userId} doctorProfileId={doctorProfileId}>
+      <SocketProvider userId={userId} doctorProfileId={doctorProfileId} role={role ?? undefined}>
         {layoutContent}
       </SocketProvider>
     );

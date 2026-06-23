@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { getSocket, disconnectSocket } from '@/lib/socket';
 import type { Socket } from 'socket.io-client';
 import { Bell, X } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 interface SocketContextValue {
   socket: Socket | null;
@@ -18,12 +19,15 @@ interface SocketProviderProps {
   children: React.ReactNode;
   userId: string;
   doctorProfileId: string;
+  role?: string;
 }
 
-export function SocketProvider({ children, userId, doctorProfileId }: SocketProviderProps) {
+export function SocketProvider({ children, userId, doctorProfileId, role }: SocketProviderProps) {
   const queryClient = useQueryClient();
   const socketRef = useRef<Socket | null>(null);
   const [toast, setToast] = useState<{ message: string; visible: boolean } | null>(null);
+  const [popup, setPopup] = useState<{ title: string; body: string; visible: boolean } | null>(null);
+  const router = useRouter();
 
   useEffect(() => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
@@ -159,6 +163,47 @@ export function SocketProvider({ children, userId, doctorProfileId }: SocketProv
             prev && prev.message === data.body ? { ...prev, visible: false } : prev
           );
         }, 6000);
+
+        // Global Alert Modal for Doctors on new Schedule Events
+        if (role === 'doctor' && data.entityType === 'schedule_event') {
+          // Play HTML5 sound alert
+          try {
+            new Audio('/sounds/alert.mp3').play().catch(() => {});
+          } catch (e) {
+            console.log('Audio file play blocked or unavailable');
+          }
+
+          // Web Audio API Synthesized chime fallback to guarantee auditory cue
+          try {
+            const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+            if (AudioContextClass) {
+              const audioCtx = new AudioContextClass();
+              const playChimeNote = (freq: number, start: number, dur: number) => {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, start);
+                gain.gain.setValueAtTime(0.15, start);
+                gain.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(start);
+                osc.stop(start + dur);
+              };
+              const now = audioCtx.currentTime;
+              playChimeNote(587.33, now, 0.15); // D5
+              playChimeNote(880.00, now + 0.1, 0.4); // A5
+            }
+          } catch (e) {
+            console.log('Synthesized chime blocked or unsupported', e);
+          }
+
+          setPopup({
+            title: data.title || 'PERMINTAAN PERTEMUAN BARU!',
+            body: data.body,
+            visible: true,
+          });
+        }
       }
     });
 
@@ -191,7 +236,7 @@ export function SocketProvider({ children, userId, doctorProfileId }: SocketProv
       socket.off('connect_error');
       disconnectSocket();
     };
-  }, [userId, doctorProfileId, queryClient]);
+  }, [userId, doctorProfileId, queryClient, role, router]);
 
   return (
     <SocketContext.Provider value={{ socket: socketRef.current }}>
@@ -211,6 +256,46 @@ export function SocketProvider({ children, userId, doctorProfileId }: SocketProv
           >
             <X className="h-4 w-4" />
           </button>
+        </div>
+      )}
+
+      {/* Global Doctor Pop-Up Modal for tentative schedule requests */}
+      {popup && popup.visible && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 backdrop-blur-md p-4 animate-in fade-in duration-300">
+          <div className="relative bg-background border border-primary/20 rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-5 animate-in zoom-in-95 duration-200">
+            <div className="flex flex-col items-center text-center space-y-3">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-amber-500/10 text-amber-500 animate-pulse">
+                <Bell className="h-8 w-8" />
+              </div>
+              <h3 className="text-xl font-bold tracking-tight text-foreground uppercase">
+                🚨 {popup.title}
+              </h3>
+            </div>
+            
+            <div className="bg-muted/40 p-4 rounded-xl border border-muted text-center">
+              <p className="text-sm font-medium text-foreground leading-relaxed">
+                {popup.body}
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-2 pt-2 sm:flex-row sm:justify-end">
+              <button
+                onClick={() => setPopup(null)}
+                className="w-full sm:w-auto px-4 py-2 text-sm font-medium rounded-lg border hover:bg-muted text-muted-foreground transition-colors cursor-pointer"
+              >
+                Tutup
+              </button>
+              <button
+                onClick={() => {
+                  setPopup(null);
+                  router.push('/schedule');
+                }}
+                className="w-full sm:w-auto px-4 py-2 text-sm font-medium rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground transition-colors shadow-sm cursor-pointer"
+              >
+                Buka Jadwal
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </SocketContext.Provider>
