@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useMembership } from '@/hooks/use-membership';
 import { SocketProvider } from '@/providers/socket-provider';
-import { PlaneTakeoff, Calendar, History, Settings, LogOut, Menu, X, ChevronDown, User, Building2, Users, CheckSquare } from 'lucide-react';
+import { apiFetch } from '@/lib/api';
+import { PlaneTakeoff, Calendar, History, LogOut, Menu, X, ChevronDown, User, Building2, Users, CheckSquare, UserPlus, Copy, Check, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { NotificationInbox } from '@/components/ui/notification-inbox';
@@ -28,6 +29,41 @@ export default function DashboardLayout({
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [activeProfileName, setActiveProfileName] = useState('Select Doctor Profile');
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
+
+  // Invite assistant state (doctor role only)
+  const [isInviteOpen, setIsInviteOpen] = useState(false);
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [isGeneratingInvite, setIsGeneratingInvite] = useState(false);
+  const [isCopied, setIsCopied] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+
+  const handleGenerateInvite = async () => {
+    if (!doctorProfileId) return;
+    setIsGeneratingInvite(true);
+    setInviteError(null);
+    setInviteLink(null);
+    try {
+      const res = await apiFetch<any>('/auth/invite-assistant', {
+        method: 'POST',
+        body: JSON.stringify({ doctorProfileId }),
+      });
+      const { inviteToken } = res.data;
+      const origin = typeof window !== 'undefined' ? window.location.origin : '';
+      setInviteLink(`${origin}/register/assistant?token=${inviteToken}`);
+    } catch (err: any) {
+      setInviteError(err.message || 'Gagal membuat link undangan.');
+    } finally {
+      setIsGeneratingInvite(false);
+    }
+  };
+
+  const handleCopyInvite = () => {
+    if (!inviteLink) return;
+    navigator.clipboard.writeText(inviteLink).then(() => {
+      setIsCopied(true);
+      setTimeout(() => setIsCopied(false), 2500);
+    });
+  };
 
   useEffect(() => {
     const active = memberships.find((m) => m.doctorProfileId === doctorProfileId);
@@ -197,6 +233,64 @@ export default function DashboardLayout({
             );
           })}
         </nav>
+
+        {/* Invite Assistant Panel — doctor role only */}
+        {role === 'doctor' && doctorProfileId && (
+          <div className="px-4 pb-3 border-b">
+            <button
+              onClick={() => { setIsInviteOpen(!isInviteOpen); setInviteLink(null); setInviteError(null); }}
+              className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
+            >
+              <span className="flex items-center gap-2">
+                <UserPlus className="h-4 w-4" />
+                Undang Asisten
+              </span>
+              <ChevronDown className={cn('h-4 w-4 transition-transform', isInviteOpen && 'rotate-180')} />
+            </button>
+
+            {isInviteOpen && (
+              <div className="mt-2 space-y-2 px-1">
+                <p className="text-[11px] text-muted-foreground leading-snug">
+                  Generate link undangan (berlaku 48 jam) untuk asisten bergabung ke profil dokter Anda.
+                </p>
+
+                {inviteError && (
+                  <p className="text-[11px] text-destructive">{inviteError}</p>
+                )}
+
+                {inviteLink ? (
+                  <div className="space-y-1.5">
+                    <div className="rounded-md bg-muted/60 border px-2.5 py-1.5 text-[10px] font-mono text-muted-foreground break-all leading-relaxed">
+                      {inviteLink}
+                    </div>
+                    <button
+                      onClick={handleCopyInvite}
+                      className="flex w-full items-center justify-center gap-1.5 rounded-md bg-primary text-primary-foreground text-xs font-medium py-1.5 hover:opacity-90 transition-opacity"
+                    >
+                      {isCopied ? (
+                        <><Check className="h-3.5 w-3.5" /> Tersalin!</>
+                      ) : (
+                        <><Copy className="h-3.5 w-3.5" /> Salin Link</>  
+                      )}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={handleGenerateInvite}
+                    disabled={isGeneratingInvite}
+                    className="flex w-full items-center justify-center gap-1.5 rounded-md bg-primary text-primary-foreground text-xs font-medium py-1.5 hover:opacity-90 transition-opacity disabled:opacity-60"
+                  >
+                    {isGeneratingInvite ? (
+                      <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Membuat Link...</>
+                    ) : (
+                      <><UserPlus className="h-3.5 w-3.5" /> Generate Link Undangan</>
+                    )}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Sidebar Footer */}
         <div className="p-4 border-t bg-muted/20">

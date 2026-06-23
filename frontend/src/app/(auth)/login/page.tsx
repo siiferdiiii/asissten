@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { apiFetch } from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -213,6 +214,13 @@ export default function LoginPage() {
                   {isLoading ? 'Signing In...' : 'Sign In'}
                   {!isLoading && <ArrowRight className="h-4 w-4" />}
                 </Button>
+
+                <p className="text-center text-xs text-muted-foreground pt-1">
+                  Belum punya akun?{' '}
+                  <Link href="/register" className="text-[#2E5266] font-semibold hover:underline">
+                    Daftar sebagai Dokter
+                  </Link>
+                </p>
               </form>
             </CardContent>
           </Card>
